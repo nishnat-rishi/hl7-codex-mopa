@@ -1,18 +1,18 @@
-import { type NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { createLogger } from "@mopa/logger";
 import {
   buildAuthorizationUrl,
   bypassToken,
   isAuthBypassed,
+  STATE_COOKIE,
   serializeCookie,
   TOKEN_COOKIE,
   VERIFIER_COOKIE,
-  STATE_COOKIE,
 } from "@mopa/smart-auth";
-import crypto from "node:crypto";
-import { createLogger } from "@mopa/logger";
+import { type NextRequest, NextResponse } from "next/server";
+import { SMART_CLIENT_ID, SMART_REDIRECT_URI, SMART_SCOPE } from "../../lib/smart-config";
 
 const logger = createLogger("smart");
-import { SMART_CLIENT_ID, SMART_REDIRECT_URI, SMART_SCOPE } from "../../lib/smart-config";
 
 /**
  * EHR launch entry-point.
@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
     logger.info("smart.launch", {
       patientId,
       correlationId: patientId ? `smart-${patientId}` : undefined,
-      path:    "/launch",
-      method:  "GET",
+      path: "/launch",
+      method: "GET",
       summary: `CDS SMART App launched for patient ${patientId ?? "unknown"} — SMART on FHIR bypass`,
     });
     const response = NextResponse.redirect(new URL("/", request.url));

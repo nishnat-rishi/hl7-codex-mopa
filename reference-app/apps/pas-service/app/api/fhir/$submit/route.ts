@@ -19,6 +19,11 @@ interface PaSubmitRequest {
  * Entry point for prior-authorization submission. Validates the request,
  * delegates CQL policy evaluation to the Payer Backend, and returns a
  * FHIR ClaimResponse with the determination.
+ *
+ * Reference-app deviation: the demo UI submits patient/regimen identifiers
+ * rather than a complete Da Vinci PAS Claim bundle. A production integration
+ * must accept and validate the structured Claim request and return the PAS
+ * response bundle while preserving this policy boundary.
  */
 export async function POST(request: NextRequest) {
   let body: PaSubmitRequest;

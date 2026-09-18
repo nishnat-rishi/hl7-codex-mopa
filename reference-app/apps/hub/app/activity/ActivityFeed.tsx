@@ -14,6 +14,7 @@ const SVC_BADGE: Record<ServiceName, string> = {
   payer: "bg-orange-100 text-orange-800 border-orange-300",
   ehr:   "bg-slate-800  text-white      border-slate-700",
   hub:   "bg-teal-100   text-teal-800   border-teal-300",
+  smart: "bg-blue-100   text-blue-800   border-blue-300",
 };
 
 const SVC_DOT: Record<ServiceName, string> = {
@@ -23,6 +24,7 @@ const SVC_DOT: Record<ServiceName, string> = {
   payer: "bg-orange-400",
   ehr:   "bg-slate-600",
   hub:   "bg-teal-400",
+  smart: "bg-blue-400",
 };
 
 const METHOD_COLOR: Record<string, string> = {
@@ -60,14 +62,22 @@ function groupEntries(entries: LogEntry[]): Group[] {
   const map = new Map<string, Group>();
   for (const e of entries) {
     const key = e.correlationId ?? `ungrouped-${e.ts}`;
-    if (!map.has(key)) {
-      map.set(key, { correlationId: key, entries: [], patientId: e.patientId, hook: e.hook, outcome: undefined, startTs: e.ts });
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        correlationId: key,
+        entries: [],
+        patientId: e.patientId,
+        hook: e.hook,
+        outcome: undefined,
+        startTs: e.ts,
+      };
+      map.set(key, group);
     }
-    const g = map.get(key)!;
-    g.entries.push(e);
-    if (e.patientId) g.patientId = e.patientId;
-    if (e.hook)      g.hook      = e.hook;
-    if (e.outcome)   g.outcome   = e.outcome;
+    group.entries.push(e);
+    if (e.patientId) group.patientId = e.patientId;
+    if (e.hook) group.hook = e.hook;
+    if (e.outcome) group.outcome = e.outcome;
   }
   return [...map.values()];
 }
@@ -293,14 +303,15 @@ export default function ActivityFeed() {
     return () => es.close();
   }, []);
 
+  const entryCount = entries.length;
   useEffect(() => {
-    if (!paused) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [entries.length, paused]);
+    if (!paused && entryCount > 0) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [entryCount, paused]);
 
   const filtered = filter === "all" ? entries : entries.filter((e) => e.service === filter);
   const groups   = groupEntries(filtered);
 
-  const services: Array<ServiceName | "all"> = ["all", "crd", "dtr", "pas", "payer", "ehr", "hub"];
+  const services: Array<ServiceName | "all"> = ["all", "crd", "dtr", "pas", "payer", "ehr", "smart", "hub"];
 
   return (
     <div className="flex flex-col gap-3 w-full">

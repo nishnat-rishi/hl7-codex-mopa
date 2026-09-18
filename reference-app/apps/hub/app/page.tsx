@@ -46,14 +46,14 @@ const NAME_COLOR: Record<Accent, string> = {
 function SvcBox({
   name,
   port,
-  role,
+  description,
   sub,
   accent = "slate",
   className = "",
 }: {
   name: string;
   port: number;
-  role: string;
+  description: string;
   sub?: string;
   accent?: Accent;
   className?: string;
@@ -69,7 +69,7 @@ function SvcBox({
         <span className={`text-sm font-semibold ${NAME_COLOR[accent]}`}>{name}</span>
         <span className={`font-mono text-xs ${PORT_COLOR[accent]}`}>:{port}</span>
       </div>
-      <p className={`text-xs mt-0.5 ${ROLE_COLOR[accent]}`}>{role}</p>
+      <p className={`text-xs mt-0.5 ${ROLE_COLOR[accent]}`}>{description}</p>
       {sub && <p className="text-[11px] text-slate-400 mt-0.5 italic">{sub}</p>}
     </a>
   );
@@ -118,7 +118,7 @@ function ServicesTab() {
             <SvcBox
               name="EHR"
               port={4001}
-              role="Patient chart · Order entry · SMART host · PA submission"
+              description="Patient chart · Order entry · SMART host · PA submission"
               accent="dark"
               className="h-full"
             />
@@ -126,7 +126,7 @@ function ServicesTab() {
           <SvcBox
             name="HAPI FHIR"
             port={8080}
-            role="FHIR R4 patient data store"
+            description="FHIR R4 patient data store"
             sub="Shared data layer"
             accent="dark"
           />
@@ -146,10 +146,28 @@ function ServicesTab() {
         <p className="text-[10px] font-semibold text-amber-500 uppercase tracking-wider mb-2">
           Coverage &amp; Authorization (CDS Hooks)
         </p>
-        <div className="flex gap-2">
-          <SvcBox name="CRD" port={4003} role="Coverage determination · order-select · order-sign" accent="amber" />
-          <SvcBox name="DTR" port={4004} role="Questionnaire · DTR launch via CRD card" accent="amber" />
-          <SvcBox name="PAS" port={4005} role="PA submission routing" accent="amber" />
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 items-stretch">
+          <SvcBox
+            name="CRD"
+            port={4003}
+            description="Coverage determination · order-select · order-sign"
+            accent="amber"
+            className="h-full"
+          />
+          <SvcBox
+            name="DTR"
+            port={4004}
+            description="Questionnaire · DTR launch via CRD card"
+            accent="amber"
+            className="h-full"
+          />
+          <SvcBox
+            name="PAS"
+            port={4005}
+            description="PA submission routing"
+            accent="amber"
+            className="h-full"
+          />
         </div>
       </div>
 
@@ -171,7 +189,7 @@ function ServicesTab() {
             <SvcBox
               name="Hub"
               port={4000}
-              role="Knowledge Artifact Repository (not part of MOPA)"
+              description="Knowledge Artifact Repository (not part of MOPA)"
               sub="/fhir/Library · /fhir/PlanDefinition"
               accent="dark"
             />
@@ -180,7 +198,7 @@ function ServicesTab() {
             <SvcBox
               name="Payer Backend"
               port={4006}
-              role="Rules Engine (reference uses CQL)"
+              description="Rules Engine (reference uses CQL)"
               sub="Approval · pend · denial"
               accent="amber"
             />
