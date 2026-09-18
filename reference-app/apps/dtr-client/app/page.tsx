@@ -1,14 +1,9 @@
-import { cookies } from "next/headers";
+import { isAuthBypassed, patientFromBypassToken, verifyToken } from "@mopa/smart-auth";
 import { ServiceIntro } from "@mopa/ui";
-import {
-  verifyToken,
-  isAuthBypassed,
-  patientFromBypassToken,
-  TOKEN_COOKIE,
-} from "@mopa/smart-auth";
+import { cookies } from "next/headers";
 import { buildQuestionnaire } from "../lib/questionnaire-gen";
+import { DTR_TOKEN_COOKIE, EHR_BASE_URL } from "../lib/smart-config";
 import QuestionnaireForm from "./QuestionnaireForm";
-import { EHR_BASE_URL } from "../lib/smart-config";
 
 interface PageProps {
   searchParams: Promise<{
@@ -20,7 +15,7 @@ interface PageProps {
 export default async function DtrClientHome({ searchParams }: PageProps) {
   const { appContext: rawAppContext, returnRegimen } = await searchParams;
   const cookieStore = await cookies();
-  const rawToken = cookieStore.get(TOKEN_COOKIE)?.value;
+  const rawToken = cookieStore.get(DTR_TOKEN_COOKIE)?.value;
 
   // No launch context: show service landing instead of an auth error
   if (!rawToken) {
@@ -151,7 +146,6 @@ export default async function DtrClientHome({ searchParams }: PageProps) {
                     )}
                   </dd>
                 </div>
-
               </dl>
             </div>
 

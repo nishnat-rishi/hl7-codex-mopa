@@ -1,8 +1,9 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { parseCookies, isAuthBypassed, TOKEN_COOKIE } from "@mopa/smart-auth";
-import { ITEM_DEFINITIONS } from "../../../lib/questionnaire-gen";
-import type { AnswerCoding, QItem } from "../../../lib/questionnaire-gen";
 import { createLogger } from "@mopa/logger";
+import { isAuthBypassed, parseCookies } from "@mopa/smart-auth";
+import { type NextRequest, NextResponse } from "next/server";
+import type { AnswerCoding, QItem } from "../../../lib/questionnaire-gen";
+import { ITEM_DEFINITIONS } from "../../../lib/questionnaire-gen";
+import { DTR_TOKEN_COOKIE } from "../../../lib/smart-config";
 
 const logger = createLogger("dtr");
 const EHR_FHIR_BASE = process.env.EHR_FHIR_BASE_URL ?? "http://localhost:4001/api/fhir";
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
   }
 
   const cookies = parseCookies(request.headers.get("cookie"));
-  const rawToken = cookies[TOKEN_COOKIE] ?? "";
+  const rawToken = cookies[DTR_TOKEN_COOKIE] ?? "";
   const bearerToken = isAuthBypassed() ? rawToken : rawToken;
   const patientId = body.patientId;
   // Single correlation ID shared across both log entries so the submit

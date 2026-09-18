@@ -10,6 +10,7 @@
 const CODE_TTL_MS = 60_000;
 
 export interface PendingCode {
+  clientId: string;
   patientId: string;
   scope: string;
   redirectUri: string;
@@ -27,14 +28,18 @@ export function storeCode(code: string, data: Omit<PendingCode, "expiresAt">): v
 }
 
 /**
- * Look up and atomically consume an authorization code.
- * Returns the associated grant data, or `null` when the code is unknown,
- * already used, or expired.
+ * Look up and atomically consume an authorization code for its original
+ * client. Returns the associated grant data, or `null` when the code is
+ * unknown, already used, expired, or presented by another client.
  */
-export function consumeCode(code: string): PendingCode | null {
+export function consumeCode(code: string, clientId: string): PendingCode | null {
   const entry = store.get(code);
   if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    store.delete(code);
+    return null;
+  }
+  if (entry.clientId !== clientId) return null;
   store.delete(code); // single-use
-  if (Date.now() > entry.expiresAt) return null;
   return entry;
 }

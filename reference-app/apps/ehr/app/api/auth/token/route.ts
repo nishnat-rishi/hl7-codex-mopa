@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { issueToken, generateCodeChallenge } from "@mopa/smart-auth";
-import { consumeCode } from "../../../../lib/auth-code-store";
 import { createLogger } from "@mopa/logger";
+import { generateCodeChallenge, issueToken } from "@mopa/smart-auth";
+import { type NextRequest, NextResponse } from "next/server";
+import { consumeCode } from "../../../../lib/auth-code-store";
 
 const logger = createLogger("ehr");
 const CORS = { "Access-Control-Allow-Origin": "*" };
@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Consume code (single-use, TTL enforced inside consumeCode) ---
-  const grant = consumeCode(code);
+  // --- Consume code for its original client (single-use, TTL enforced inside consumeCode) ---
+  const grant = consumeCode(code, clientId);
   if (!grant) {
     return NextResponse.json(
       { error: "invalid_grant", error_description: "Authorization code invalid or expired" },

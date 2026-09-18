@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server";
 import crypto from "node:crypto";
-import { storeCode } from "../../../../lib/auth-code-store";
 import { createLogger } from "@mopa/logger";
+import { type NextRequest, NextResponse } from "next/server";
+import { storeCode } from "../../../../lib/auth-code-store";
 
 const logger = createLogger("ehr");
 
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
   // --- Issue authorization code and persist to store (state threaded as correlationId) ---
   const code = crypto.randomBytes(16).toString("hex");
-  storeCode(code, { patientId, scope, redirectUri, codeChallenge, state });
+  storeCode(code, { clientId, patientId, scope, redirectUri, codeChallenge, state });
 
   logger.info("smart.launch", {
     correlationId: state,

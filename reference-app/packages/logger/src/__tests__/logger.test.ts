@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { log, createLogger } from "../index";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createLogger, log } from "../index";
 
 function getLastWritten(): Record<string, unknown> | undefined {
   const calls = vi.mocked(process.stdout.write).mock.calls;
@@ -76,5 +76,13 @@ describe("createLogger", () => {
     logger.error("error", { summary: "err test" });
     const parsed = getLastWritten();
     expect(parsed?.level).toBe("error");
+  });
+
+  it("preserves SMART launch events as their own service", () => {
+    const logger = createLogger("smart");
+    logger.info("smart.launch", { summary: "SMART app launch" });
+    const parsed = getLastWritten();
+    expect(parsed?.service).toBe("smart");
+    expect(parsed?.type).toBe("smart.launch");
   });
 });

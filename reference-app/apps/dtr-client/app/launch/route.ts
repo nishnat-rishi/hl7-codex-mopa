@@ -1,18 +1,23 @@
-import { type NextRequest, NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { createLogger } from "@mopa/logger";
 import {
   buildAuthorizationUrl,
   bypassToken,
   isAuthBypassed,
   serializeCookie,
-  TOKEN_COOKIE,
-  VERIFIER_COOKIE,
-  STATE_COOKIE,
 } from "@mopa/smart-auth";
-import crypto from "node:crypto";
-import { createLogger } from "@mopa/logger";
+import { type NextRequest, NextResponse } from "next/server";
 
 const logger = createLogger("dtr");
-import { SMART_CLIENT_ID, SMART_REDIRECT_URI, SMART_SCOPE } from "../../lib/smart-config";
+
+import {
+  DTR_STATE_COOKIE,
+  DTR_TOKEN_COOKIE,
+  DTR_VERIFIER_COOKIE,
+  SMART_CLIENT_ID,
+  SMART_REDIRECT_URI,
+  SMART_SCOPE,
+} from "../../lib/smart-config";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -36,7 +41,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(url);
     response.headers.append(
       "Set-Cookie",
-      serializeCookie(TOKEN_COOKIE, token.access_token, { maxAge: 3600 })
+      serializeCookie(DTR_TOKEN_COOKIE, token.access_token, { maxAge: 3600 })
     );
     return response;
   }
@@ -68,11 +73,13 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(url);
   response.headers.append(
     "Set-Cookie",
-    serializeCookie(VERIFIER_COOKIE, verifier, { maxAge: 300 })
+    serializeCookie(DTR_VERIFIER_COOKIE, verifier, { maxAge: 300 })
   );
   response.headers.append(
     "Set-Cookie",
-    serializeCookie(STATE_COOKIE, Buffer.from(statePayload).toString("base64url"), { maxAge: 300 })
+    serializeCookie(DTR_STATE_COOKIE, Buffer.from(statePayload).toString("base64url"), {
+      maxAge: 300,
+    })
   );
   return response;
 }

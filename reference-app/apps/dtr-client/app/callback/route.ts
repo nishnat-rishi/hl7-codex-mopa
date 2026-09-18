@@ -1,14 +1,14 @@
+import { exchangeCode, parseCookies, serializeCookie } from "@mopa/smart-auth";
 import { type NextRequest, NextResponse } from "next/server";
-import {
-  exchangeCode,
-  parseCookies,
-  serializeCookie,
-  TOKEN_COOKIE,
-  VERIFIER_COOKIE,
-  STATE_COOKIE,
-} from "@mopa/smart-auth";
 
-import { SMART_CLIENT_ID, SMART_REDIRECT_URI, TOKEN_ENDPOINT } from "../../lib/smart-config";
+import {
+  DTR_STATE_COOKIE,
+  DTR_TOKEN_COOKIE,
+  DTR_VERIFIER_COOKIE,
+  SMART_CLIENT_ID,
+  SMART_REDIRECT_URI,
+  TOKEN_ENDPOINT,
+} from "../../lib/smart-config";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cookies = parseCookies(request.headers.get("cookie"));
-  const savedStateRaw = cookies[STATE_COOKIE];
+  const savedStateRaw = cookies[DTR_STATE_COOKIE];
 
   // Decode state payload (includes appContext + returnRegimen carried through the OAuth round-trip)
   let appContext: string | undefined;
@@ -39,22 +39,27 @@ export async function GET(request: NextRequest) {
     returnRegimen?: string;
   }
 
-  if (savedStateRaw) {
-    try {
-      const payload = JSON.parse(
-        Buffer.from(savedStateRaw, "base64url").toString("utf-8")
-      ) as StatePayload;
-      if (payload.state !== state) {
-        return NextResponse.json({ error: "State mismatch" }, { status: 400 });
-      }
-      appContext = payload.appContext;
-      returnRegimen = payload.returnRegimen;
-    } catch {
-      // Non-fatal — state was not base64 encoded (e.g. plain string in bypass)
-    }
+  if (!savedStateRaw) {
+    return NextResponse.json({ error: "State mismatch" }, { status: 400 });
   }
 
-  const verifier = cookies[VERIFIER_COOKIE] ?? "";
+  try {
+    const payload = JSON.parse(
+      Buffer.from(savedStateRaw, "base64url").toString("utf-8")
+    ) as StatePayload;
+    if (payload.state !== state) {
+      return NextResponse.json({ error: "State mismatch" }, { status: 400 });
+    }
+    appContext = payload.appContext;
+    returnRegimen = payload.returnRegimen;
+  } catch {
+    return NextResponse.json({ error: "State mismatch" }, { status: 400 });
+  }
+
+  const verifier = cookies[DTR_VERIFIER_COOKIE];
+  if (!verifier) {
+    return NextResponse.json({ error: "Missing PKCE verifier" }, { status: 400 });
+  }
 
   const tokenResponse = await exchangeCode(TOKEN_ENDPOINT, code, verifier, {
     clientId: SMART_CLIENT_ID,
@@ -68,9 +73,11 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(homeUrl);
   response.headers.append(
     "Set-Cookie",
-    serializeCookie(TOKEN_COOKIE, tokenResponse.access_token, { maxAge: tokenResponse.expires_in })
+    serializeCookie(DTR_TOKEN_COOKIE, tokenResponse.access_token, {
+      maxAge: tokenResponse.expires_in,
+    })
   );
-  response.headers.append("Set-Cookie", serializeCookie(VERIFIER_COOKIE, "", { maxAge: 0 }));
-  response.headers.append("Set-Cookie", serializeCookie(STATE_COOKIE, "", { maxAge: 0 }));
+  response.headers.append("Set-Cookie", serializeCookie(DTR_VERIFIER_COOKIE, "", { maxAge: 0 }));
+  response.headers.append("Set-Cookie", serializeCookie(DTR_STATE_COOKIE, "", { maxAge: 0 }));
   return response;
 }

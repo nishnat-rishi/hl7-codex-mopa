@@ -49,8 +49,7 @@ export function MopaNav({ service, branded = false }: MopaNavProps) {
               Oncology Prior Authorization
             </span>
           </div>
-          <div className="ml-4 pl-4 border-l border-slate-200">
-            {/* biome-ignore lint/a11y/useImgPresentationRole: decorative brand logo */}
+          <div className="ml-auto pl-4 border-l border-slate-200">
             <img
               src="/codex-logo.png"
               alt="CodeX"
@@ -66,7 +65,6 @@ export function MopaNav({ service, branded = false }: MopaNavProps) {
     <nav className="bg-white border-b border-slate-200">
       <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
         <span className="text-sm font-semibold tracking-tight text-slate-600">MOPA: {service}</span>
-        {/* biome-ignore lint/a11y/useImgPresentationRole: decorative brand logo */}
         <img
           src="/codex-logo.png"
           alt="CodeX"
