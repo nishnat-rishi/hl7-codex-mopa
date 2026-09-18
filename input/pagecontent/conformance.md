@@ -52,7 +52,7 @@ A conformant **Oncology CRD Client** (EHR or ordering system):
    proposed CRD RequestGroup extension-context expansion.
 6. **SHOULD** provide `fhirAuthorization` in the CDS Hooks request to allow the CRD service to
    query patient context directly from the EHR FHIR server.
-6. **SHALL** apply accepted CDS Hooks suggestion actions (delete + create) to
+7. **SHALL** apply accepted CDS Hooks suggestion actions (delete + create) to
    `context.draftOrders` in-session when a Propose Alternate Request card is accepted
    at `order-select`. The EHR **SHALL** update `RequestGroup.action[].resource`
    references to point to the replacement resources, and send the modified Bundle to
