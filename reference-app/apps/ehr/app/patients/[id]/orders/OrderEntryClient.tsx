@@ -391,6 +391,13 @@ export default function OrderEntryPage({
     if (!selected) return;
     const suggestionCard = selectCards.find((c) => c.suggestions?.length);
     if (!suggestionCard?.suggestions) return;
+    // Any order edit after sign must be re-signed before PAS can use it.
+    setSigned(false);
+    setSignCards([]);
+    setSignCoverageQuestionnaire(undefined);
+    setSignedDraftOrders(null);
+    setClaimId(null);
+    setClaimResponse(null);
     // Substitution suggestions operate on component MedicationRequests. The
     // initial order-select payload is intentionally RequestGroup-only, so
     // rebuild the full order-sign bundle when applying a suggestion.
@@ -450,6 +457,12 @@ export default function OrderEntryPage({
   }
 
   function onOverrideSuggestion() {
+    setSigned(false);
+    setSignCards([]);
+    setSignCoverageQuestionnaire(undefined);
+    setSignedDraftOrders(null);
+    setClaimId(null);
+    setClaimResponse(null);
     setSuggestionOverridden(true);
     setSuggestionAccepted(false);
   }
