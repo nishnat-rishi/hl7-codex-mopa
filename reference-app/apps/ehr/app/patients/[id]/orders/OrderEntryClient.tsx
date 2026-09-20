@@ -11,13 +11,13 @@ import {
 } from "@mopa/oncology-policy";
 import { useEffect, useState } from "react";
 import { CdsCardRow, OrderSelectSummary } from "./components/cds-cards";
+import {
+  type CoverageQuestionnaire,
+  findCoverageQuestionnaire,
+} from "./components/coverage-questionnaire";
 import { fireCdsHook } from "./components/crd-hooks";
 import { ClaimResponseDisplay, type ClaimResponseSummary } from "./components/pa-display";
 import { RegimenSelector } from "./components/regimen-selector";
-import {
-  findCoverageQuestionnaire,
-  type CoverageQuestionnaire,
-} from "./components/coverage-questionnaire";
 
 // ---------------------------------------------------------------------------
 // Step status helpers
@@ -244,16 +244,20 @@ function PartnerQuestionnaireLaunchButton({
 // Main component
 // ---------------------------------------------------------------------------
 
-export default function OrderEntryPage({ patientId }: { patientId: string }) {
-  // On DTR return (?dtr-complete=true&regimen=X), pre-populate state from
-  // URL params so the page renders correctly on the first paint — no flash
-  // of "select a regimen" before the useEffect re-fires order-select.
-  const dtrReturnParams =
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-  const isDtrReturn = dtrReturnParams?.get("dtr-complete") === "true";
-  const dtrRegimenId = dtrReturnParams?.get("regimen");
-  const dtrRegimen =
-    isDtrReturn && dtrRegimenId ? (REGIMENS.find((r) => r.id === dtrRegimenId) ?? null) : null;
+export default function OrderEntryPage({
+  patientId,
+  dtrReturnRegimenId,
+}: {
+  patientId: string;
+  dtrReturnRegimenId?: string;
+}) {
+  // The server page reads the return URL and passes the same initial selection
+  // to server and browser renders. Reading window.location here would hydrate
+  // a different regimen selector than the server rendered.
+  const dtrRegimen = dtrReturnRegimenId
+    ? (REGIMENS.find((r) => r.id === dtrReturnRegimenId) ?? null)
+    : null;
+  const isDtrReturn = Boolean(dtrRegimen);
 
   const [selected, setSelected] = useState<Regimen | null>(dtrRegimen);
 

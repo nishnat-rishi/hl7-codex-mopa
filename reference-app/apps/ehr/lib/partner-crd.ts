@@ -53,7 +53,11 @@ async function partnerToken(): Promise<string> {
 }
 
 async function searchBundle(baseUrl: string, path: string): Promise<FhirBundle> {
-  const response = await fetch(`${baseUrl}/${path}`);
+  // A completed DTR response must be visible to the very next CRD call. HAPI
+  // can otherwise reuse an older search result that predates the FHIR write.
+  const response = await fetch(`${baseUrl}/${path}`, {
+    headers: { "Cache-Control": "no-cache" },
+  });
   if (!response.ok) throw new Error(`Local FHIR prefetch failed: HTTP ${response.status}`);
   return (await response.json()) as FhirBundle;
 }
