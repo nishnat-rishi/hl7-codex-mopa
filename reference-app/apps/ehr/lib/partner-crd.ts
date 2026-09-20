@@ -66,6 +66,7 @@ export async function buildPartnerPrefetch(patientId: string): Promise<Record<st
     coverageBundle,
     conditionBundle,
     observationBundle,
+    questionnaireResponseBundle,
     priorMedicationRequestBundle,
   ] = await Promise.all([
     fetch(`${baseUrl}/Patient/${encodedPatient}`).then(async (response) => {
@@ -78,6 +79,7 @@ export async function buildPartnerPrefetch(patientId: string): Promise<Record<st
     ),
     searchBundle(baseUrl, `Condition?patient=${encodedPatient}&clinical-status=active&_count=100`),
     searchBundle(baseUrl, `Observation?patient=${encodedPatient}&_count=200`),
+    searchBundle(baseUrl, `QuestionnaireResponse?subject=Patient/${encodedPatient}&_count=100`),
     searchBundle(
       baseUrl,
       `MedicationRequest?patient=${encodedPatient}&status=completed,stopped&_count=100`
@@ -88,6 +90,7 @@ export async function buildPartnerPrefetch(patientId: string): Promise<Record<st
     coverageBundle,
     conditionBundle,
     observationBundle,
+    questionnaireResponseBundle,
     priorMedicationRequestBundle,
   };
 }

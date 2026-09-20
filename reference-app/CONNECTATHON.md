@@ -115,6 +115,25 @@ the EHR FHIR server so the demo can re-run CRD. Its code labels that as demo-onl
 a partner DTR should use the exchange and return pattern agreed for the
 Connectathon rather than relying on this write-back behavior.
 
+For the partner package path, the bundled DTR carries the package's
+`QuestionnaireResponse` `qr-context` and `qr-coverage` references into the
+saved response. The next partner CRD call prefetches patient-scoped completed
+QuestionnaireResponses as well as coded Observations. This matters for text-only
+items such as `priorTherapy`: there is no safe Observation mapping for free text,
+so the payer must receive the completed, order-linked QuestionnaireResponse.
+
+The no-browser regression for this handoff is:
+
+```bash
+./node_modules/.bin/vitest run apps/ehr/app/partner-dtr-headless.test.ts
+```
+
+It exercises the EHR's outbound `context + coverage + RequestGroup` package
+request, the DTR package renderer, QR construction with both links, and the
+next CRD prefetch. It mocks network responses and does not send PHI or create a
+real authorization. A separate live partner test is still needed before
+claiming a full browser-to-payer round trip.
+
 ### PAS
 
 The EHR does not send a full Da Vinci PAS Claim Bundle. Its request body is:
