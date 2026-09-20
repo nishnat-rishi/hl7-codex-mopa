@@ -1,7 +1,7 @@
 import { isAuthBypassed, patientFromBypassToken, verifyToken } from "@mopa/smart-auth";
 import { ServiceIntro } from "@mopa/ui";
 import { cookies } from "next/headers";
-import { buildQuestionnaire } from "../lib/questionnaire-gen";
+import { buildQuestionnaire, buildQuestionnaireFromPackage } from "../lib/questionnaire-gen";
 import { DTR_TOKEN_COOKIE, EHR_BASE_URL } from "../lib/smart-config";
 import QuestionnaireForm from "./QuestionnaireForm";
 
@@ -9,11 +9,12 @@ interface PageProps {
   searchParams: Promise<{
     appContext?: string;
     returnRegimen?: string;
+    packageId?: string;
   }>;
 }
 
 export default async function DtrClientHome({ searchParams }: PageProps) {
-  const { appContext: rawAppContext, returnRegimen } = await searchParams;
+  const { appContext: rawAppContext, returnRegimen, packageId } = await searchParams;
   const cookieStore = await cookies();
   const rawToken = cookieStore.get(DTR_TOKEN_COOKIE)?.value;
 
@@ -108,7 +109,30 @@ export default async function DtrClientHome({ searchParams }: PageProps) {
   }
 
   const missingKeys = parsedContext?.missingDataElements ?? [];
-  const questionnaire = buildQuestionnaire(missingKeys);
+  let partnerPackageError: string | undefined;
+  // A package ID means CRD supplied a Questionnaire canonical. Its package is
+  // authoritative; appContext is only the SMART-link fallback when no canonical
+  // was returned by CRD.
+  let questionnaire = packageId ? { items: [] } : buildQuestionnaire(missingKeys);
+  if (packageId) {
+    try {
+      const response = await fetch(
+        `${EHR_BASE_URL}/api/dtr-package/${encodeURIComponent(packageId)}`,
+        {
+          cache: "no-store",
+        }
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const packaged = buildQuestionnaireFromPackage(await response.json());
+      if (!packaged.questionnaire) {
+        throw new Error(packaged.error ?? "The partner package could not be rendered.");
+      }
+      questionnaire = packaged.questionnaire;
+    } catch (error) {
+      partnerPackageError =
+        error instanceof Error ? error.message : "Partner questionnaire package unavailable";
+    }
+  }
 
   // ------------------------------------------------------------------
   // Render
@@ -126,6 +150,11 @@ export default async function DtrClientHome({ searchParams }: PageProps) {
           </div>
         ) : (
           <>
+            {partnerPackageError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
+                Unable to load the partner questionnaire package: {partnerPackageError}
+              </div>
+            )}
             {/* Launch context summary */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-5">
               <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
@@ -150,7 +179,7 @@ export default async function DtrClientHome({ searchParams }: PageProps) {
             </div>
 
             {/* Questionnaire */}
-            {questionnaire.items.length === 0 ? (
+            {partnerPackageError ? null : questionnaire.items.length === 0 ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-800">
                 <strong>All required data is present.</strong> No additional documentation needed.
                 Return to the EHR to proceed with the order.

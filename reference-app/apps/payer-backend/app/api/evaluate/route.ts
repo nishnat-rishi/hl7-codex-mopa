@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
       patientId: body.patientId,
       path: "/api/evaluate",
       method: "POST",
+      requestUrl: request.url,
+      responseUrl: request.url,
       request: body,
       summary: `Payer policy evaluation for patient ${body.patientId}`,
     });
@@ -49,6 +51,7 @@ export async function POST(request: NextRequest) {
       paResult: decision.status,
       durationMs: Date.now() - t0,
       status: 200,
+      responseUrl: request.url,
       response: decision,
       summary: `Payer evaluation: ${decision.status} (${Date.now() - t0}ms)`,
     });

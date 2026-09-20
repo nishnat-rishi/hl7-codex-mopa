@@ -1,8 +1,9 @@
 import { createLogger } from "@mopa/logger";
 import { isAuthBypassed, parseCookies } from "@mopa/smart-auth";
 import { type NextRequest, NextResponse } from "next/server";
-import type { AnswerCoding, QItem } from "../../../lib/questionnaire-gen";
+import type { AnswerCoding, QItem, QuestionnaireAnswer } from "../../../lib/questionnaire-gen";
 import { ITEM_DEFINITIONS } from "../../../lib/questionnaire-gen";
+import { buildQuestionnaireResponse } from "../../../lib/questionnaire-response";
 import { DTR_TOKEN_COOKIE } from "../../../lib/smart-config";
 
 const logger = createLogger("dtr");
@@ -11,7 +12,9 @@ const EHR_FHIR_BASE = process.env.EHR_FHIR_BASE_URL ?? "http://localhost:4001/ap
 /** Request body: one answer per questionnaire item. */
 interface SubmitRequest {
   patientId: string;
-  answers: Record<string, AnswerCoding>;
+  answers: Record<string, QuestionnaireAnswer>;
+  items?: QItem[];
+  questionnaireCanonical?: string;
 }
 
 const LAB_CATEGORY = {
@@ -22,7 +25,7 @@ const LAB_CATEGORY = {
 
 function buildObservation(
   patientId: string,
-  itemDef: QItem,
+  itemDef: Extract<QItem, { type: "choice" }>,
   answerCoding: AnswerCoding,
   date: string
 ) {
@@ -34,24 +37,6 @@ function buildObservation(
     subject: { reference: `Patient/${patientId}` },
     effectiveDateTime: date,
     valueCodeableConcept: { coding: [answerCoding], text: answerCoding.display },
-  };
-}
-
-function buildQuestionnaireResponse(
-  patientId: string,
-  answers: Record<string, AnswerCoding>,
-  date: string
-) {
-  return {
-    resourceType: "QuestionnaireResponse",
-    status: "completed",
-    subject: { reference: `Patient/${patientId}` },
-    authored: date,
-    item: Object.entries(answers).map(([linkId, coding]) => ({
-      linkId,
-      text: ITEM_DEFINITIONS[linkId]?.text ?? linkId,
-      answer: [{ valueCoding: coding }],
-    })),
   };
 }
 
@@ -83,6 +68,7 @@ export async function POST(request: NextRequest) {
   const rawToken = cookies[DTR_TOKEN_COOKIE] ?? "";
   const bearerToken = isAuthBypassed() ? rawToken : rawToken;
   const patientId = body.patientId;
+  const itemDefinitions = new Map((body.items ?? []).map((item) => [item.linkId, item]));
   // Single correlation ID shared across both log entries so the submit
   // and the FHIR write-back appear in the same Activity group.
   const correlationId = crypto.randomUUID();
@@ -92,6 +78,8 @@ export async function POST(request: NextRequest) {
     patientId,
     path: "/api/submit",
     method: "POST",
+    requestUrl: request.url,
+    responseUrl: request.url,
     missingElements: Object.keys(body.answers),
     request: body,
     summary: `DTR submit — ${Object.keys(body.answers).join(", ")} for patient ${patientId}`,
@@ -110,14 +98,14 @@ export async function POST(request: NextRequest) {
   // Production: hold in session; include in draftOrders at order-sign.
   // ------------------------------------------------------------------
   const observationIds: string[] = [];
-  for (const [linkId, answerCoding] of Object.entries(body.answers)) {
-    const itemDef = ITEM_DEFINITIONS[linkId];
-    if (!itemDef) continue;
+  for (const [linkId, answer] of Object.entries(body.answers)) {
+    const itemDef = itemDefinitions.get(linkId) ?? ITEM_DEFINITIONS[linkId];
+    if (!itemDef || itemDef.type !== "choice" || typeof answer === "string") continue;
     try {
       const res = await fetch(`${EHR_FHIR_BASE}/Observation`, {
         method: "POST",
         headers: fhirHeaders,
-        body: JSON.stringify(buildObservation(body.patientId, itemDef, answerCoding, today)),
+        body: JSON.stringify(buildObservation(body.patientId, itemDef, answer, today)),
       });
       if (res.ok) {
         const saved = (await res.json()) as { id?: string };
@@ -136,7 +124,15 @@ export async function POST(request: NextRequest) {
     const res = await fetch(`${EHR_FHIR_BASE}/QuestionnaireResponse`, {
       method: "POST",
       headers: fhirHeaders,
-      body: JSON.stringify(buildQuestionnaireResponse(body.patientId, body.answers, today)),
+      body: JSON.stringify(
+        buildQuestionnaireResponse(
+          body.patientId,
+          body.answers,
+          body.items ?? [],
+          today,
+          body.questionnaireCanonical
+        )
+      ),
     });
     if (!res.ok) {
       const text = await res.text();
@@ -148,6 +144,8 @@ export async function POST(request: NextRequest) {
       patientId,
       path: "/QuestionnaireResponse",
       method: "POST",
+      requestUrl: `${EHR_FHIR_BASE}/QuestionnaireResponse`,
+      responseUrl: `${EHR_FHIR_BASE}/QuestionnaireResponse`,
       status: 201,
       durationMs: Date.now() - t0,
       response: { qrId: saved.id, observationIds },

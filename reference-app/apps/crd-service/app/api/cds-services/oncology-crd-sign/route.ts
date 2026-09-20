@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     hook: "order-sign",
     path: "/api/cds-services/oncology-crd-sign",
     method: "POST",
+    requestUrl: request.url,
+    responseUrl: request.url,
     status: 200,
     durationMs,
     outcome,

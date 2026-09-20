@@ -8,41 +8,47 @@ import type { LogEntry, ServiceName } from "@mopa/logger";
 // ---------------------------------------------------------------------------
 
 const SVC_BADGE: Record<ServiceName, string> = {
-  crd:   "bg-amber-100  text-amber-800  border-amber-300",
-  dtr:   "bg-violet-100 text-violet-800 border-violet-300",
-  pas:   "bg-slate-100  text-slate-700  border-slate-300",
+  crd: "bg-amber-100  text-amber-800  border-amber-300",
+  dtr: "bg-violet-100 text-violet-800 border-violet-300",
+  pas: "bg-slate-100  text-slate-700  border-slate-300",
   payer: "bg-orange-100 text-orange-800 border-orange-300",
-  ehr:   "bg-slate-800  text-white      border-slate-700",
-  hub:   "bg-teal-100   text-teal-800   border-teal-300",
+  ehr: "bg-slate-800  text-white      border-slate-700",
+  hub: "bg-teal-100   text-teal-800   border-teal-300",
   smart: "bg-blue-100   text-blue-800   border-blue-300",
 };
 
 const SVC_DOT: Record<ServiceName, string> = {
-  crd:   "bg-amber-400",
-  dtr:   "bg-violet-400",
-  pas:   "bg-slate-400",
+  crd: "bg-amber-400",
+  dtr: "bg-violet-400",
+  pas: "bg-slate-400",
   payer: "bg-orange-400",
-  ehr:   "bg-slate-600",
-  hub:   "bg-teal-400",
+  ehr: "bg-slate-600",
+  hub: "bg-teal-400",
   smart: "bg-blue-400",
 };
 
 const METHOD_COLOR: Record<string, string> = {
-  GET:    "text-sky-600",
-  POST:   "text-violet-600",
-  PUT:    "text-amber-600",
+  GET: "text-sky-600",
+  POST: "text-violet-600",
+  PUT: "text-amber-600",
   DELETE: "text-red-600",
-  PATCH:  "text-orange-600",
+  PATCH: "text-orange-600",
 };
 
 const STATUS_COLOR = (s: number) =>
-  s < 300 ? "text-green-700" : s < 400 ? "text-sky-600" : s < 500 ? "text-amber-700" : "text-red-600";
+  s < 300
+    ? "text-green-700"
+    : s < 400
+      ? "text-sky-600"
+      : s < 500
+        ? "text-amber-700"
+        : "text-red-600";
 
 const OUTCOME_COLOR: Record<string, string> = {
-  "pre-approved":  "text-green-700",
-  "pa-required":   "text-amber-700",
-  "dtr-required":  "text-violet-700",
-  "approved":      "text-green-700",
+  "pre-approved": "text-green-700",
+  "pa-required": "text-amber-700",
+  "dtr-required": "text-violet-700",
+  approved: "text-green-700",
 };
 
 // ---------------------------------------------------------------------------
@@ -84,10 +90,19 @@ function groupEntries(entries: LogEntry[]): Group[] {
 
 function relativeTime(ts: string): string {
   const d = Date.now() - new Date(ts).getTime();
-  if (d < 5_000)     return "just now";
-  if (d < 60_000)    return `${Math.floor(d / 1_000)}s ago`;
+  if (d < 5_000) return "just now";
+  if (d < 60_000) return `${Math.floor(d / 1_000)}s ago`;
   if (d < 3_600_000) return `${Math.floor(d / 60_000)}m ago`;
   return new Date(ts).toLocaleTimeString();
+}
+
+function urlHost(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return new URL(value).host;
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -97,10 +112,17 @@ function relativeTime(ts: string): string {
 function GroupDivider({ group }: { group: Group }) {
   const isUngrouped = group.correlationId.startsWith("ungrouped-");
   const shortId = isUngrouped
-    ? new Date(group.startTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+    ? new Date(group.startTs).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
     : group.correlationId.slice(0, 8);
   const services = [...new Set(group.entries.map((e) => e.service as ServiceName))];
-  const outcomeColor = group.outcome ? (OUTCOME_COLOR[group.outcome] ?? "text-slate-500") : undefined;
+  const outcomeColor = group.outcome
+    ? (OUTCOME_COLOR[group.outcome] ?? "text-slate-500")
+    : undefined;
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-100">
@@ -155,7 +177,7 @@ function GroupDivider({ group }: { group: Group }) {
 
 function EntryRow({ entry }: { entry: LogEntry }) {
   const [open, setOpen] = useState(false);
-  const svc       = entry.service as ServiceName;
+  const svc = entry.service as ServiceName;
   // A request object that contains only a `url` key is redundant: the URL
   // is already shown as entry.path on the row. Suppress expand + panel for
   // those cases only; non-trivial GET requests (e.g. dtr.launch context)
@@ -169,7 +191,12 @@ function EntryRow({ entry }: { entry: LogEntry }) {
   const hasPayload =
     (entry.request != null && !isUrlOnlyRequest(entry.request)) ||
     entry.response != null ||
+    entry.requestUrl != null ||
+    entry.responseUrl != null ||
     (entry.path != null && entry.summary != null && entry.level !== "info");
+  const requestHost = urlHost(entry.requestUrl);
+  const responseHost = urlHost(entry.responseUrl);
+  const endpointHost = requestHost ?? responseHost;
 
   // The primary label: method + path when present, otherwise summary.
   // Summary is reserved for the expanded panel to avoid repetition.
@@ -189,17 +216,23 @@ function EntryRow({ entry }: { entry: LogEntry }) {
         ].join(" ")}
       >
         {/* Service dot */}
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-px ${SVC_DOT[svc] ?? "bg-slate-400"}`} />
+        <span
+          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-px ${SVC_DOT[svc] ?? "bg-slate-400"}`}
+        />
 
         {/* Log type */}
         <span className="font-mono text-[10px] text-slate-500 flex-shrink-0">{entry.type}</span>
 
         {/* Divider */}
-        <span className="text-slate-200 text-[10px] flex-shrink-0" aria-hidden>·</span>
+        <span className="text-slate-200 text-[10px] flex-shrink-0" aria-hidden>
+          ·
+        </span>
 
         {/* Method */}
         {entry.method && (
-          <span className={`font-mono text-[11px] font-semibold flex-shrink-0 ${METHOD_COLOR[entry.method] ?? "text-slate-600"}`}>
+          <span
+            className={`font-mono text-[11px] font-semibold flex-shrink-0 ${METHOD_COLOR[entry.method] ?? "text-slate-600"}`}
+          >
             {entry.method}
           </span>
         )}
@@ -217,9 +250,20 @@ function EntryRow({ entry }: { entry: LogEntry }) {
           <span className="flex-1 min-w-0" />
         )}
 
+        {endpointHost && (
+          <span
+            className="font-mono text-[10px] text-sky-700 bg-sky-50 border border-sky-100 rounded px-1.5 py-px flex-shrink-0 max-w-56 truncate"
+            title={entry.requestUrl ?? entry.responseUrl}
+          >
+            {endpointHost}
+          </span>
+        )}
+
         {/* Status — only when defined */}
         {entry.status != null && entry.status > 0 && (
-          <span className={`font-mono text-[10px] flex-shrink-0 tabular-nums ${STATUS_COLOR(entry.status)}`}>
+          <span
+            className={`font-mono text-[10px] flex-shrink-0 tabular-nums ${STATUS_COLOR(entry.status)}`}
+          >
             {entry.status}
           </span>
         )}
@@ -246,6 +290,31 @@ function EntryRow({ entry }: { entry: LogEntry }) {
               what is already visible (method, path, status, duration) */}
           {entry.path && entry.summary && entry.level !== "info" && (
             <p className="text-[11px] text-slate-500 leading-snug">{entry.summary}</p>
+          )}
+
+          {(entry.requestUrl || entry.responseUrl) && (
+            <div className="grid gap-1.5 text-[10px]">
+              {entry.requestUrl && (
+                <div className="flex gap-2 min-w-0">
+                  <span className="font-semibold uppercase tracking-wider text-slate-400 w-20 flex-shrink-0">
+                    Request URL
+                  </span>
+                  <code className="font-mono text-sky-700 truncate" title={entry.requestUrl}>
+                    {entry.requestUrl}
+                  </code>
+                </div>
+              )}
+              {entry.responseUrl && (
+                <div className="flex gap-2 min-w-0">
+                  <span className="font-semibold uppercase tracking-wider text-slate-400 w-20 flex-shrink-0">
+                    Response URL
+                  </span>
+                  <code className="font-mono text-emerald-700 truncate" title={entry.responseUrl}>
+                    {entry.responseUrl}
+                  </code>
+                </div>
+              )}
+            </div>
           )}
 
           {entry.request != null && !isUrlOnlyRequest(entry.request) && (
@@ -281,8 +350,8 @@ function EntryRow({ entry }: { entry: LogEntry }) {
 
 export default function ActivityFeed() {
   const [entries, setEntries] = useState<LogEntry[]>([]);
-  const [paused,  setPaused]  = useState(false);
-  const [filter,  setFilter]  = useState<ServiceName | "all">("all");
+  const [paused, setPaused] = useState(false);
+  const [filter, setFilter] = useState<ServiceName | "all">("all");
   const [connected, setConnected] = useState(false);
 
   const pausedRef = useRef(paused);
@@ -291,14 +360,16 @@ export default function ActivityFeed() {
 
   useEffect(() => {
     const es = new EventSource("/api/log/stream");
-    es.onopen  = () => setConnected(true);
+    es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.onmessage = (event: MessageEvent) => {
       if (pausedRef.current) return;
       try {
         const entry = JSON.parse(event.data as string) as LogEntry;
         setEntries((prev) => [...prev.slice(-499), entry]);
-      } catch { /* malformed */ }
+      } catch {
+        /* malformed */
+      }
     };
     return () => es.close();
   }, []);
@@ -309,19 +380,28 @@ export default function ActivityFeed() {
   }, [entryCount, paused]);
 
   const filtered = filter === "all" ? entries : entries.filter((e) => e.service === filter);
-  const groups   = groupEntries(filtered);
+  const groups = groupEntries(filtered);
 
-  const services: Array<ServiceName | "all"> = ["all", "crd", "dtr", "pas", "payer", "ehr", "smart", "hub"];
+  const services: Array<ServiceName | "all"> = [
+    "all",
+    "crd",
+    "dtr",
+    "pas",
+    "payer",
+    "ehr",
+    "smart",
+    "hub",
+  ];
 
   return (
     <div className="flex flex-col gap-3 w-full">
-
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 flex-wrap">
-
         {/* Live indicator */}
         <div className="flex items-center gap-1.5">
-          <span className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-500" : "bg-slate-300"}`} />
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${connected ? "bg-green-500" : "bg-slate-300"}`}
+          />
           <span className="text-[11px] text-slate-500">{connected ? "Live" : "Disconnected"}</span>
         </div>
 
@@ -355,7 +435,10 @@ export default function ActivityFeed() {
           </button>
           <button
             type="button"
-            onClick={async () => { await fetch("/api/log", { method: "DELETE" }); setEntries([]); }}
+            onClick={async () => {
+              await fetch("/api/log", { method: "DELETE" });
+              setEntries([]);
+            }}
             className="text-[11px] px-2.5 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors"
           >
             Clear

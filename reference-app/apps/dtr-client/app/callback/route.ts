@@ -32,11 +32,13 @@ export async function GET(request: NextRequest) {
   // Decode state payload (includes appContext + returnRegimen carried through the OAuth round-trip)
   let appContext: string | undefined;
   let returnRegimen: string | undefined;
+  let packageId: string | undefined;
 
   interface StatePayload {
     state: string;
     appContext?: string;
     returnRegimen?: string;
+    packageId?: string;
   }
 
   if (!savedStateRaw) {
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
     }
     appContext = payload.appContext;
     returnRegimen = payload.returnRegimen;
+    packageId = payload.packageId;
   } catch {
     return NextResponse.json({ error: "State mismatch" }, { status: 400 });
   }
@@ -69,6 +72,7 @@ export async function GET(request: NextRequest) {
   const homeUrl = new URL("/", request.url);
   if (appContext) homeUrl.searchParams.set("appContext", appContext);
   if (returnRegimen) homeUrl.searchParams.set("returnRegimen", returnRegimen);
+  if (packageId) homeUrl.searchParams.set("packageId", packageId);
 
   const response = NextResponse.redirect(homeUrl);
   response.headers.append(

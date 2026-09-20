@@ -1,5 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { parseCookies, TOKEN_COOKIE, isAuthBypassed } from "@mopa/smart-auth";
+import { createLogger } from "@mopa/logger";
+import { callPartnerCrd, isPartnerCrdConfigured } from "../../../lib/partner-crd";
+
+const logger = createLogger("ehr");
 
 /**
  * Server-side proxy for CDS Hooks requests — POST /api/crd-hooks
@@ -11,8 +15,7 @@ import { parseCookies, TOKEN_COOKIE, isAuthBypassed } from "@mopa/smart-auth";
  * FHIR proxy when resolving prefetch data.
  */
 
-const CRD_SERVICE_URL =
-  process.env.NEXT_PUBLIC_CRD_SERVICE_URL ?? "http://localhost:4003";
+const CRD_SERVICE_URL = process.env.NEXT_PUBLIC_CRD_SERVICE_URL ?? "http://localhost:4003";
 
 const EHR_FHIR_BASE = process.env.NEXT_PUBLIC_EHR_BASE_URL
   ? `${process.env.NEXT_PUBLIC_EHR_BASE_URL}/api/fhir`
@@ -53,6 +56,33 @@ export async function POST(request: NextRequest) {
   // No token + not bypassed: fhirServer intentionally omitted.
 
   try {
+    if (isPartnerCrdConfigured()) {
+      const hook = body.hook;
+      if (hook !== "order-select" && hook !== "order-sign")
+        return NextResponse.json({ error: "unsupported_hook" }, { status: 400 });
+      const partnerUrl = `${process.env.CRD_PARTNER_BASE_URL?.replace(/\/$/, "")}/crd/cds-services/${hook}`;
+      const startedAt = Date.now();
+      const upstream = await callPartnerCrd(hook, enriched);
+      logger.info("cds.response", {
+        correlationId: typeof body.hookInstance === "string" ? body.hookInstance : undefined,
+        patientId:
+          typeof (body.context as { patientId?: unknown } | undefined)?.patientId === "string"
+            ? (body.context as { patientId: string }).patientId
+            : undefined,
+        hook,
+        method: "POST",
+        path: `/crd/cds-services/${hook}`,
+        requestUrl: partnerUrl,
+        responseUrl: partnerUrl,
+        status: upstream.status,
+        durationMs: Date.now() - startedAt,
+        request: enriched,
+        response: upstream.payload,
+        summary: `${hook} → partner CRD (${upstream.status})`,
+      });
+      return NextResponse.json(upstream.payload, { status: upstream.status });
+    }
+
     const upstream = await fetch(`${CRD_SERVICE_URL}/api/cds-services/oncology-crd`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

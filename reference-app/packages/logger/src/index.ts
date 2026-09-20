@@ -27,6 +27,7 @@ export type LogType =
   | "fhir.write" // Outgoing FHIR POST/PUT (write-back)
   | "crmi.read" // Outgoing read against a knowledge artifact repository (Hub / CRMI)
   | "dtr.launch" // DTR SMART launch initiated
+  | "dtr.package" // Partner DTR $questionnaire-package exchange
   | "dtr.submit" // DTR questionnaire submitted
   | "pa.submit" // PA $submit received by PAS
   | "pa.evaluate" // Payer policy evaluation invoked
@@ -52,6 +53,10 @@ export interface LogEntry {
   // HTTP fields
   method?: string;
   path?: string;
+  /** Full URL used for the request, including the host. */
+  requestUrl?: string;
+  /** Full URL associated with the response, including the host. */
+  responseUrl?: string;
   status?: number;
   durationMs?: number;
 

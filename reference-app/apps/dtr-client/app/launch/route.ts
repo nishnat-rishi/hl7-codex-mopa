@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
   const appContext = searchParams.get("appContext") ?? undefined;
   // returnRegimen carries the selected regimen ID back from the EHR
   const returnRegimen = searchParams.get("returnRegimen") ?? undefined;
+  const packageId = searchParams.get("packageId") ?? undefined;
 
   if (!iss) {
     return NextResponse.json({ error: "Missing iss parameter" }, { status: 400 });
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
     const url = new URL("/", request.url);
     if (appContext) url.searchParams.set("appContext", appContext);
     if (returnRegimen) url.searchParams.set("returnRegimen", returnRegimen);
+    if (packageId) url.searchParams.set("packageId", packageId);
     const response = NextResponse.redirect(url);
     response.headers.append(
       "Set-Cookie",
@@ -54,11 +56,13 @@ export async function GET(request: NextRequest) {
     patientId,
     path: "/launch",
     method: "GET",
-    request: { iss, launch, appContext, returnRegimen },
+    requestUrl: request.url,
+    responseUrl: request.url,
+    request: { iss, launch, appContext, returnRegimen, packageId },
     summary: `DTR launch initiated for patient ${patientId ?? "unknown"} — redirecting to EHR authorize`,
   });
 
-  const statePayload = JSON.stringify({ state, appContext, returnRegimen });
+  const statePayload = JSON.stringify({ state, appContext, returnRegimen, packageId });
   const { url, verifier } = await buildAuthorizationUrl(
     {
       iss,

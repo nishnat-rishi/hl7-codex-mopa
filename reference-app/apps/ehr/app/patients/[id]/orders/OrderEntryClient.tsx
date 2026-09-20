@@ -1,6 +1,6 @@
 "use client";
 
-import type { CdsAction, CdsCard } from "@mopa/cds-hooks";
+import type { CdsAction, CdsCard, CdsResponse } from "@mopa/cds-hooks";
 import {
   applyBiosimilarSubstitution,
   buildDraftBundle,
@@ -14,12 +14,18 @@ import { CdsCardRow, OrderSelectSummary } from "./components/cds-cards";
 import { fireCdsHook } from "./components/crd-hooks";
 import { ClaimResponseDisplay, type ClaimResponseSummary } from "./components/pa-display";
 import { RegimenSelector } from "./components/regimen-selector";
+import {
+  findCoverageQuestionnaire,
+  type CoverageQuestionnaire,
+} from "./components/coverage-questionnaire";
 
 // ---------------------------------------------------------------------------
 // Step status helpers
 // ---------------------------------------------------------------------------
 
 type StepStatus = "pending" | "active" | "action" | "complete" | "skipped";
+
+const DTR_CLIENT_URL = process.env.NEXT_PUBLIC_DTR_CLIENT_URL ?? "http://localhost:4004";
 
 function StepHeader({
   num,
@@ -152,6 +158,88 @@ function SubStepHeader({
   );
 }
 
+function PartnerQuestionnaireLaunchButton({
+  requirement,
+  patientId,
+  selectedRegimenId,
+}: {
+  requirement: CoverageQuestionnaire;
+  patientId: string;
+  selectedRegimenId?: string;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function launch() {
+    // Open synchronously while this is still a user gesture. The package call is
+    // asynchronous, and opening after it completes can be blocked by browsers.
+    const dtrWindow = window.open("about:blank", "_blank");
+    if (!dtrWindow) {
+      setError("Your browser blocked the DTR window. Allow pop-ups and try again.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/dtr-package", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contextId: requirement.contextId,
+          patientId,
+          // The coverage-information update is the partner's authoritative
+          // order representation. Its processing context already contains the
+          // original component orders from the CRD hook request.
+          orders: [requirement.order],
+          questionnaireCanonical: requirement.canonical,
+          coverageReference: requirement.coverageReference,
+        }),
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+      const { packageId } = (await response.json()) as { packageId?: string };
+      if (!packageId) throw new Error("Partner DTR package identifier missing");
+      const url = new URL(`${DTR_CLIENT_URL}/launch`);
+      url.searchParams.set(
+        "iss",
+        `${process.env.NEXT_PUBLIC_EHR_BASE_URL ?? "http://localhost:4001"}/api/fhir`
+      );
+      url.searchParams.set("launch", `patient/${patientId}`);
+      url.searchParams.set("packageId", packageId);
+      if (selectedRegimenId) url.searchParams.set("returnRegimen", selectedRegimenId);
+      dtrWindow.location.replace(url.toString());
+    } catch (cause) {
+      dtrWindow.close();
+      setError(cause instanceof Error ? cause.message : "Unable to load partner questionnaire");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-slate-500">
+        Partner questionnaire:{" "}
+        <code className="font-mono text-[11px]">{requirement.canonical}</code>
+      </p>
+      <button
+        type="button"
+        onClick={launch}
+        disabled={loading}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {loading ? "Loading partner questionnaire…" : "Complete partner questionnaire"}
+        <span aria-hidden="true">↗</span>
+      </button>
+      {error && (
+        <p className="text-xs text-red-700">Unable to launch partner questionnaire: {error}</p>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -172,6 +260,12 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
   // CRD state — separate per hook
   const [selectCards, setSelectCards] = useState<CdsCard[]>([]);
   const [signCards, setSignCards] = useState<CdsCard[]>([]);
+  const [selectCoverageQuestionnaire, setSelectCoverageQuestionnaire] = useState<
+    CoverageQuestionnaire | undefined
+  >();
+  const [signCoverageQuestionnaire, setSignCoverageQuestionnaire] = useState<
+    CoverageQuestionnaire | undefined
+  >();
   const [selectLoading, setSelectLoading] = useState(isDtrReturn);
   const [signLoading, setSignLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,7 +332,10 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
     window.history.replaceState({}, "", clean.toString());
     setError(null);
     fireCdsHook("order-select", patientId, dtrRegimen)
-      .then((r) => setSelectCards(r.cards))
+      .then((r) => {
+        setSelectCards(r.cards);
+        setSelectCoverageQuestionnaire(findCoverageQuestionnaire(r.systemActions));
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "CRD service unavailable"))
       .finally(() => setSelectLoading(false));
   }, [patientId, isDtrReturn, dtrRegimen]);
@@ -247,7 +344,7 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
   async function callCrdHook(
     hook: "order-select" | "order-sign",
     regimen: Regimen,
-    onSuccess: (cards: CdsCard[]) => void,
+    onSuccess: (response: CdsResponse) => void,
     draftOrdersOverride?: object
   ) {
     const loading = hook === "order-select" ? setSelectLoading : setSignLoading;
@@ -255,7 +352,7 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
     setError(null);
     try {
       const response = await fireCdsHook(hook, patientId, regimen, draftOrdersOverride);
-      onSuccess(response.cards);
+      onSuccess(response);
     } catch (e) {
       setError(e instanceof Error ? e.message : "CRD service unavailable");
     } finally {
@@ -268,13 +365,18 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
     setSigned(false);
     setSelectCards([]);
     setSignCards([]);
+    setSelectCoverageQuestionnaire(undefined);
+    setSignCoverageQuestionnaire(undefined);
     setClaimResponse(null);
     setPaError(null);
     setSuggestionAccepted(false);
     setSuggestionOverridden(false);
     setModifiedDraftOrders(null);
     setDtrCompleted(false);
-    callCrdHook("order-select", regimen, setSelectCards);
+    callCrdHook("order-select", regimen, (response) => {
+      setSelectCards(response.cards);
+      setSelectCoverageQuestionnaire(findCoverageQuestionnaire(response.systemActions));
+    });
   }
 
   function onAcceptSuggestion() {
@@ -352,8 +454,9 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
     callCrdHook(
       "order-sign",
       selected,
-      (newCards) => {
-        setSignCards(newCards);
+      (response) => {
+        setSignCards(response.cards);
+        setSignCoverageQuestionnaire(findCoverageQuestionnaire(response.systemActions));
         setSigned(true);
       },
       draftOverride
@@ -393,17 +496,19 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
   }
 
   // ── Determine step statuses ──
+  const selectNeedsDtr = Boolean(selectCoverageQuestionnaire || selectDtrCard);
+  const signNeedsDtr = Boolean(signCoverageQuestionnaire || signDtrCard);
   const selectStatus: StepStatus = !selected
     ? "pending"
     : selectLoading
       ? "active"
-      : selectDtrCard && !dtrCompleted
+      : selectNeedsDtr && !dtrCompleted
         ? "action"
         : "complete";
 
   const dtrStatus: StepStatus = !selected
     ? "pending"
-    : !selectDtrCard
+    : !selectNeedsDtr
       ? "skipped"
       : dtrCompleted
         ? "complete"
@@ -416,7 +521,7 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
     : signLoading
       ? "active"
       : signed
-        ? signDtrCard
+        ? signNeedsDtr
           ? "action"
           : "complete"
         : "pending";
@@ -616,7 +721,9 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
               <p className="text-sm text-slate-400">
                 {selectDtrCard
                   ? "Skipped — order signed without completing documentation."
-                  : "All required clinical data present — documentation not needed."}
+                  : selectCoverageQuestionnaire
+                    ? "Skipped — order signed without completing the partner questionnaire."
+                    : "All required clinical data present — documentation not needed."}
               </p>
             )}
 
@@ -627,28 +734,36 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
               </p>
             )}
 
-            {dtrStatus === "action" && selectDtrCard && (
+            {dtrStatus === "action" && (
               <>
-                {selectDtrCard.detail && (
+                {selectDtrCard?.detail && (
                   <p className="text-sm text-slate-600 mb-3 leading-relaxed">
                     {renderDetailInline(selectDtrCard.detail)}
                   </p>
                 )}
-                {selectDtrCard.links?.map((link) => {
-                  const href = buildDtrHref(link, selectDtrCard, patientId, selected?.id);
-                  return (
-                    <a
-                      key={link.url}
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
-                    >
-                      {link.label}
-                      <span aria-hidden="true">↗</span>
-                    </a>
-                  );
-                })}
+                {selectCoverageQuestionnaire ? (
+                  <PartnerQuestionnaireLaunchButton
+                    requirement={selectCoverageQuestionnaire}
+                    patientId={patientId}
+                    selectedRegimenId={selected?.id}
+                  />
+                ) : (
+                  selectDtrCard?.links?.map((link) => {
+                    const href = buildDtrHref(link, selectDtrCard, patientId, selected?.id);
+                    return (
+                      <a
+                        key={link.url}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+                      >
+                        {link.label}
+                        <span aria-hidden="true">↗</span>
+                      </a>
+                    );
+                  })
+                )}
               </>
             )}
 
@@ -667,7 +782,7 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
             num="2.1"
             service="CRD"
             title="Authorization"
-            status={signed && !signDtrCard ? "complete" : signLoading ? "active" : "pending"}
+            status={signed && !signNeedsDtr ? "complete" : signLoading ? "active" : "pending"}
           />
           <div className="bg-white">
             {signLoading && (
@@ -708,37 +823,45 @@ export default function OrderEntryPage({ patientId }: { patientId: string }) {
             num="2.2"
             service="DTR"
             title="Documentation"
-            status={!signed ? "pending" : signDtrCard ? "action" : "skipped"}
+            status={!signed ? "pending" : signNeedsDtr ? "action" : "skipped"}
           />
           <div className="bg-white px-4 py-3">
             {!signed && <p className="text-sm text-slate-400">Awaiting order-sign guidance.</p>}
 
-            {signed && signDtrCard && (
+            {signed && signNeedsDtr && (
               <>
-                {signDtrCard.detail && (
+                {signDtrCard?.detail && (
                   <p className="text-sm text-slate-600 mb-3 leading-relaxed">
                     {renderDetailInline(signDtrCard.detail)}
                   </p>
                 )}
-                {signDtrCard.links?.map((link) => {
-                  const href = buildDtrHref(link, signDtrCard, patientId, selected?.id);
-                  return (
-                    <a
-                      key={link.url}
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
-                    >
-                      {link.label}
-                      <span aria-hidden="true">↗</span>
-                    </a>
-                  );
-                })}
+                {signCoverageQuestionnaire ? (
+                  <PartnerQuestionnaireLaunchButton
+                    requirement={signCoverageQuestionnaire}
+                    patientId={patientId}
+                    selectedRegimenId={selected?.id}
+                  />
+                ) : (
+                  signDtrCard?.links?.map((link) => {
+                    const href = buildDtrHref(link, signDtrCard, patientId, selected?.id);
+                    return (
+                      <a
+                        key={link.url}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+                      >
+                        {link.label}
+                        <span aria-hidden="true">↗</span>
+                      </a>
+                    );
+                  })
+                )}
               </>
             )}
 
-            {signed && !signDtrCard && (
+            {signed && !signNeedsDtr && (
               <p className="text-sm text-slate-400">
                 All required clinical data present — documentation not needed.
               </p>

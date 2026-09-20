@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
     hook: cdsRequest.hook,
     path: "/api/cds-services/oncology-crd",
     method: "POST",
+    requestUrl: request.url,
+    responseUrl: request.url,
     status: 200,
     durationMs,
     outcome,

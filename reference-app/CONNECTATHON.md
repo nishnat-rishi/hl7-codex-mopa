@@ -11,17 +11,30 @@ the PAS path is not a conformant Da Vinci PAS Claim `$submit` package.
 | Integration | Configuration | Request made by the EHR | Required partner behavior |
 | --- | --- | --- | --- |
 | CRD | `NEXT_PUBLIC_CRD_SERVICE_URL` | `POST {base}/api/cds-services/oncology-crd` | Accept the CDS Hooks `order-select` and `order-sign` requests sent by this EHR and return CDS Hooks cards. |
-| DTR | A CDS Hooks card link, not an EHR environment variable | The browser opens a `type: "smart"` card link with `iss`, `launch`, `appContext`, and `returnRegimen` query parameters. | Supply a SMART-launchable URL in the CRD card and handle the DTR exchange. |
+| DTR | CRD coverage-information extension or a CDS Hooks card link | When CRD supplies a `questionnaire` canonical, the EHR calls the partner's `$questionnaire-package` operation and launches the bundled DTR with that package. Otherwise the browser opens the card's `type: "smart"` link. | Return a package containing the CRD-selected Questionnaire, or supply a SMART-launchable card link as the fallback. |
 | PAS | `PAS_SERVICE_URL` | `POST {base}/api/fhir/$submit` | Accept this reference app's compact PA request and return its expected ClaimResponse fields. |
 
 The values above are base URLs. Do not include the path suffixes that the EHR
 adds itself.
+
+When `CRD_PARTNER_BASE_URL` is set, the EHR obtains and caches a bearer token
+using the client-credentials variables below and calls the partner's standard
+CRD paths directly. The secret is read only by the server route. The EHR also
+adds local FHIR prefetch for the patient, active coverage, conditions,
+observations, and prior medication requests.
 
 ## What is configurable
 
 | Exact application environment variable | Default | Process that reads it | Use at the Connectathon |
 | --- | --- | --- | --- |
 | `NEXT_PUBLIC_CRD_SERVICE_URL` | `http://localhost:4003` | EHR server route | CRD base URL. The EHR appends `/api/cds-services/oncology-crd`. |
+| `CRD_PARTNER_BASE_URL` | unset | EHR server route | OAuth-protected partner CRD base. The EHR appends `/crd/cds-services/{hook}` and takes precedence over the local CRD URL. |
+| `CRD_PARTNER_TOKEN_URL` | unset | EHR server route | OAuth 2.0 client-credentials token endpoint. |
+| `CRD_PARTNER_CLIENT_ID` | unset | EHR server route | Partner client ID; server-side only. |
+| `CRD_PARTNER_CLIENT_SECRET` | unset | EHR server route | Partner client secret; server-side only. |
+| `CRD_PARTNER_SCOPE` | `crd dtr pas` | EHR server route | OAuth scope requested for the partner. |
+| `CRD_PARTNER_PREFETCH` | `true` | EHR server route | Include local FHIR prefetch in partner CRD requests so the partner need not reach a localhost `fhirServer`. |
+| `DTR_PARTNER_BASE_URL` | `CRD_PARTNER_BASE_URL` | EHR server route | Optional separate DTR base. The EHR appends `/Questionnaire/$questionnaire-package`; it uses the same client-credentials configuration as CRD. |
 | `PAS_SERVICE_URL` | `http://localhost:4005` | EHR server route | PAS base URL. The EHR appends `/api/fhir/$submit`. |
 | `DTR_CLIENT_URL` | `http://localhost:4004` | Local CRD service only | Base URL used only when the bundled CRD service builds its own DTR link, appending `/launch`. It has no effect when using a partner CRD. |
 | `NEXT_PUBLIC_DTR_CLIENT_URL` | `http://localhost:4004` | Local DTR client | Public callback base used by the bundled DTR client. It is not a way to configure a partner DTR. |
@@ -66,9 +79,25 @@ issuer used by the bundled SMART discovery endpoint.
 
 ### DTR
 
-There is deliberately no `DTR_SERVICE_URL` in the EHR. The EHR renders the
-`links` returned by CRD. For a link whose `type` is `smart`, it preserves the
-partner URL and appends:
+The EHR first examines `systemActions[].resource.extension` for the CRD
+[`ext-coverage-information`](https://hl7.org/fhir/us/davinci-crd/2.2.1/en/StructureDefinition-ext-coverage-information.html)
+extension. When it contains both a `questionnaire` canonical and a
+`coverage-assertion-id`, the EHR treats that Questionnaire as authoritative:
+
+1. It resolves the extension's local Coverage reference and sends the
+   CRD-updated RequestGroup to the partner `Questionnaire/$questionnaire-package`
+   operation with the assertion id. The partner's processing context retains the
+   original component orders from the CRD hook request.
+2. It verifies the returned package contains the same Questionnaire canonical,
+   stores the short-lived package in the local FHIR server, and launches the
+   bundled DTR client with its opaque package id.
+3. The bundled DTR renders the partner Questionnaire. If the package cannot be
+   retrieved or contains an unsupported question, it displays an error; it does
+   not fall back to a SMART link or infer that documentation is complete.
+
+Only when CRD does not provide a `questionnaire` canonical does the EHR render a
+card's SMART link. For a link whose `type` is `smart`, it preserves the partner
+URL and appends:
 
 ```text
 iss={NEXT_PUBLIC_EHR_BASE_URL}/api/fhir
@@ -77,10 +106,9 @@ appContext={value supplied in the CRD card, when present}
 returnRegimen={selected regimen id, when present}
 ```
 
-Use the partner DTR's launch URL in the partner CRD card. The bundled CRD can
-instead produce `{DTR_CLIENT_URL}/launch`, and the bundled DTR understands that
-route, its own callback, and its demo write-back. A generic DTR REST endpoint
-cannot be substituted by setting an environment variable.
+Use the partner DTR's launch URL in a CRD card only for this fallback path. The
+bundled CRD can instead produce `{DTR_CLIENT_URL}/launch`, and the bundled DTR
+understands that route, its own callback, and its demo write-back.
 
 The bundled DTR writes `Observation` and `QuestionnaireResponse` resources to
 the EHR FHIR server so the demo can re-run CRD. Its code labels that as demo-only;

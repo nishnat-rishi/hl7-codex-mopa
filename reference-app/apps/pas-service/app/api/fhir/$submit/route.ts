@@ -45,6 +45,8 @@ export async function POST(request: NextRequest) {
     patientId: body.patientId,
     path: "/api/fhir/$submit",
     method: "POST",
+    requestUrl: request.url,
+    responseUrl: request.url,
     request: body,
     summary: `PA submission for patient ${body.patientId}${body.regimenId ? ` (${body.regimenId})` : ""}`,
   });
@@ -84,6 +86,7 @@ export async function POST(request: NextRequest) {
     paResult: decision.status,
     durationMs: Date.now() - t0,
     status: 200,
+    responseUrl: request.url,
     response: claimResponse,
     summary: `PA result: ${decision.status} (${Date.now() - t0}ms)`,
   });
