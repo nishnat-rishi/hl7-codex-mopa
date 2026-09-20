@@ -28,7 +28,7 @@ export function isPartnerDtrConfigured(): boolean {
   return Boolean(process.env.DTR_PARTNER_BASE_URL ?? process.env.CRD_PARTNER_BASE_URL);
 }
 
-async function partnerToken(): Promise<string> {
+export async function partnerToken(): Promise<string> {
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.value;
 

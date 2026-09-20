@@ -276,6 +276,8 @@ export default function OrderEntryPage({
 
   // Order state
   const [signed, setSigned] = useState(false);
+  const [signedDraftOrders, setSignedDraftOrders] = useState<object | null>(null);
+  const [claimId, setClaimId] = useState<string | null>(null);
 
   // PAS state
   const [paSubmitting, setPaSubmitting] = useState(false);
@@ -367,6 +369,8 @@ export default function OrderEntryPage({
   function onSelectRegimen(regimen: Regimen) {
     setSelected(regimen);
     setSigned(false);
+    setSignedDraftOrders(null);
+    setClaimId(null);
     setSelectCards([]);
     setSignCards([]);
     setSelectCoverageQuestionnaire(undefined);
@@ -455,6 +459,8 @@ export default function OrderEntryPage({
     setClaimResponse(null);
     setPaError(null);
     const draftOverride = suggestionAccepted ? (modifiedDraftOrders ?? undefined) : undefined;
+    const orderBundle =
+      draftOverride ?? buildDraftBundle(patientId, selected, { stage: "order-sign" });
     callCrdHook(
       "order-sign",
       selected,
@@ -462,13 +468,15 @@ export default function OrderEntryPage({
         setSignCards(response.cards);
         setSignCoverageQuestionnaire(findCoverageQuestionnaire(response.systemActions));
         setSigned(true);
+        setSignedDraftOrders(orderBundle);
+        setClaimId(`claim-${crypto.randomUUID()}`);
       },
       draftOverride
     );
   }
 
   async function submitPa() {
-    if (!selected) return;
+    if (!selected || !signedDraftOrders) return;
     setPaSubmitting(true);
     setPaError(null);
     setClaimResponse(null);
@@ -476,7 +484,13 @@ export default function OrderEntryPage({
       const res = await fetch("/api/pa-submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patientId, regimenId: selected.id, regimenLabel: selected.label }),
+        body: JSON.stringify({
+          patientId,
+          regimenId: selected.id,
+          regimenLabel: selected.label,
+          draftOrders: signedDraftOrders,
+          claimId,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -486,11 +500,17 @@ export default function OrderEntryPage({
         outcome?: string;
         disposition?: string;
         processNote?: Array<{ text: string }>;
+        preAuthRef?: string;
+        reviewActionCode?: string;
+        reviewActionDisplay?: string;
       };
       setClaimResponse({
         outcome: cr.outcome ?? "unknown",
         disposition: cr.disposition,
         processNote: cr.processNote,
+        preAuthRef: cr.preAuthRef,
+        reviewActionCode: cr.reviewActionCode,
+        reviewActionDisplay: cr.reviewActionDisplay,
       });
     } catch (e) {
       setPaError(e instanceof Error ? e.message : "PA submission failed");
@@ -922,6 +942,9 @@ export default function OrderEntryPage({
                 outcome={claimResponse.outcome}
                 disposition={claimResponse.disposition}
                 processNote={claimResponse.processNote}
+                preAuthRef={claimResponse.preAuthRef}
+                reviewActionCode={claimResponse.reviewActionCode}
+                reviewActionDisplay={claimResponse.reviewActionDisplay}
               />
             )}
           </div>
