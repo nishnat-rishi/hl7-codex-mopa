@@ -18,6 +18,8 @@ export interface ClaimResponseSummary {
   preAuthRef?: string;
   reviewActionCode?: string;
   reviewActionDisplay?: string;
+  /** The partner supports an explicit, user-triggered Claim/$inquire. */
+  canInquire?: boolean;
 }
 
 export function ClaimResponseDisplay({

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
           { status: upstream.status }
         );
       }
-      return NextResponse.json(summarizePartnerPas(upstream.payload));
+      return NextResponse.json({ ...summarizePartnerPas(upstream.payload), canInquire: true });
     }
     const res = await fetch(`${PAS_SERVICE_URL}/api/fhir/$submit`, {
       method: "POST",

@@ -256,3 +256,19 @@ export async function submitPartnerPas(bundle: Resource) {
   const payload = await response.json().catch(() => ({ error: "Non-JSON partner PAS response" }));
   return { status: response.status, payload };
 }
+
+export async function inquirePartnerPas(bundle: Resource) {
+  const base = process.env.PAS_PARTNER_BASE_URL?.replace(/\/$/, "");
+  if (!base) fail("PAS_PARTNER_BASE_URL is not configured");
+  const response = await fetch(`${base}/Claim/$inquire`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${await partnerToken()}`,
+      Accept: "application/fhir+json",
+      "Content-Type": "application/fhir+json",
+    },
+    body: JSON.stringify(bundle),
+  });
+  const payload = await response.json().catch(() => ({ error: "Non-JSON partner PAS response" }));
+  return { status: response.status, payload };
+}

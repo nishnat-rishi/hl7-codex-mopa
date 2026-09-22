@@ -2,6 +2,7 @@ import { applyBiosimilarSubstitution, buildDraftBundle, REGIMENS } from "@mopa/o
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { summarizePartnerPas, validateSignedOrders } from "../lib/partner-pas";
+import { POST as INQUIRE } from "./api/pa-inquire/route";
 import { POST } from "./api/pa-submit/route";
 
 const PAS = "http://hl7.org/fhir/us/davinci-pas/StructureDefinition/";
@@ -174,5 +175,76 @@ describe("synthetic partner PAS boundary", () => {
       sent.entry.find((entry: any) => entry.resource.resourceType === "Claim").resource.insurance[0]
         .coverage.reference
     ).toBe("Coverage/sandra-plan");
+  });
+
+  it("checks the latest decision with $inquire using the submitted Claim.id", async () => {
+    vi.stubEnv("FHIR_BASE_URL", "http://fhir.test/fhir");
+    vi.stubEnv("PAS_PARTNER_BASE_URL", "https://payer.test/oncology/api/v1");
+    vi.stubEnv("CRD_PARTNER_TOKEN_URL", "https://payer.test/oauth/token");
+    vi.stubEnv("CRD_PARTNER_CLIENT_ID", "synthetic-client");
+    vi.stubEnv("CRD_PARTNER_CLIENT_SECRET", "synthetic-secret");
+    const coverage = {
+      resourceType: "Coverage",
+      id: "maria-plan",
+      status: "active",
+      beneficiary: { reference: "Patient/maria-garcia" },
+      payor: [{ reference: "Organization/synthetic-payer" }],
+    };
+    const pasCalls: Array<{ url: string; claimId: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/Claim/$")) {
+          const sent = JSON.parse(String(init?.body));
+          const claim = sent.entry.find(
+            (entry: { resource: { resourceType: string } }) =>
+              entry.resource.resourceType === "Claim"
+          ).resource;
+          pasCalls.push({ url, claimId: claim.id });
+        }
+        const payload = url.endsWith("/oauth/token")
+          ? { access_token: "test-token", expires_in: 3600 }
+          : url.endsWith("/Patient/maria-garcia")
+            ? { resourceType: "Patient", id: "maria-garcia" }
+            : url.includes("QuestionnaireResponse?")
+              ? { resourceType: "Bundle", entry: [] }
+              : url.includes("Coverage?")
+                ? { resourceType: "Bundle", entry: [{ resource: coverage }] }
+                : url.endsWith("/Organization/synthetic-payer")
+                  ? { resourceType: "Organization", id: "synthetic-payer" }
+                  : payerResponse(url.endsWith("/Claim/$inquire") ? "A1" : "A4");
+        return { ok: true, status: 200, json: async () => payload };
+      })
+    );
+    const input = {
+      patientId: "maria-garcia",
+      regimenId: "TH",
+      draftOrders: order("maria-garcia", "TH"),
+      claimId: "claim-manual-inquiry-test",
+    };
+    const request = (path: string, value: unknown) =>
+      new NextRequest(`http://ehr.test/api/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value),
+      });
+
+    const submitted = await POST(request("pa-submit", input));
+    expect(submitted.status).toBe(200);
+    expect(await submitted.json()).toMatchObject({ reviewActionCode: "A4", canInquire: true });
+
+    const inquired = await INQUIRE(request("pa-inquire", input));
+    expect(inquired.status).toBe(200);
+    expect(await inquired.json()).toMatchObject({ reviewActionCode: "A1", canInquire: true });
+    expect(pasCalls.map((call) => call.url)).toEqual([
+      "https://payer.test/oncology/api/v1/Claim/$submit",
+      "https://payer.test/oncology/api/v1/Claim/$inquire",
+    ]);
+    expect(pasCalls.map((call) => call.claimId)).toEqual([input.claimId, input.claimId]);
+
+    const missingClaim = await INQUIRE(request("pa-inquire", { ...input, claimId: undefined }));
+    expect(missingClaim.status).toBe(400);
+    expect(pasCalls).toHaveLength(2);
   });
 });

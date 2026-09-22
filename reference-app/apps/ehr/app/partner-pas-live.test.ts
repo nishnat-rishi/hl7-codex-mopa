@@ -70,16 +70,25 @@ describe.skipIf(!live)("live synthetic EHR CRD → PAS rehearsal", () => {
     expect((await crd(patientId, regimenId, "order-select")).cards?.length).toBeGreaterThan(0);
     const sign = await crd(patientId, regimenId, "order-sign", signed);
     expect(sign.cards?.length).toBeGreaterThan(0);
+    const claimId = `claim-rehearsal-${crypto.randomUUID()}`;
     const pas = await post("/api/pa-submit", {
       patientId,
       regimenId,
       draftOrders: signed,
-      claimId: `claim-rehearsal-${crypto.randomUUID()}`,
+      claimId,
     });
     expect(pas.reviewActionCode, JSON.stringify(pas)).toBe(expected);
     expect(pas.preAuthRef).toMatch(/^ONCO-/);
+    const inquiry = await post("/api/pa-inquire", {
+      patientId,
+      regimenId,
+      draftOrders: signed,
+      claimId,
+    });
+    expect(inquiry.reviewActionCode, JSON.stringify(inquiry)).toBe(expected);
+    expect(inquiry.preAuthRef).toBe(pas.preAuthRef);
     console.info(
-      `${name}: CRD cards ${sign.cards.length}, PAS ${pas.reviewActionCode}, ${pas.preAuthRef}`
+      `${name}: CRD cards ${sign.cards.length}, PAS ${pas.reviewActionCode}, inquiry ${inquiry.reviewActionCode}, ${pas.preAuthRef}`
     );
   });
 });
